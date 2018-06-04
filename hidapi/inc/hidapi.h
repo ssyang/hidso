@@ -148,6 +148,25 @@ extern "C" {
 			@ingroup API
 			@param vendor_id The Vendor ID (VID) of the device to open.
 			@param product_id The Product ID (PID) of the device to open.
+			@param interface_number The interface number of the device to open.
+			@param serial_number The Serial Number of the device to open
+				               (Optionally NULL).
+
+			@returns
+				This function returns a pointer to a #hid_device object on
+				success or NULL on failure.
+		*/
+		HID_API_EXPORT hid_device * HID_API_CALL hid_open_ex(unsigned short vendor_id, unsigned short product_id, int interface_number, wchar_t *serial_number);
+
+		/** @brief Open a HID device using a Vendor ID (VID), Product ID
+			(PID) and optionally a serial number.
+
+			If @p serial_number is NULL, the first device with the
+			specified VID and PID is opened.
+
+			@ingroup API
+			@param vendor_id The Vendor ID (VID) of the device to open.
+			@param product_id The Product ID (PID) of the device to open.
 			@param serial_number The Serial Number of the device to open
 				               (Optionally NULL).
 
