@@ -29,7 +29,7 @@ all: tp_el_hidio
 tp_el_hidio: $(OBJS) $(USER_OBJS)
 	@echo 'Building target: $@'
 	@echo 'Invoking: GCC C Linker'
-	gcc  -o "tp_el_hidio" $(OBJS) $(USER_OBJS) $(LIBS)
+	gcc -L/lib/i386-linux-gnu -o "tp_el_hidio" $(OBJS) $(USER_OBJS) $(LIBS)
 	@echo 'Finished building target: $@'
 	@echo ' '
 
