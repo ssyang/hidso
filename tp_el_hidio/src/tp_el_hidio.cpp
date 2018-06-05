@@ -10,6 +10,10 @@
 // dlopen()등을 사용하고 싶다면, libdl을 링크, 즉. -ldl 옵션을 붙여서 컴파일 해야 한다.
 // 또한 dl 라이브러리를 링크한다.
 // 관리자 권한으로 실행해야 함.
+// 일반 유저권한으로 실행하려면 /etc/udev/rules.d/elpusk-usb.rules 파일을 만들고
+// 그 파일 내용은
+// SUBSYSTEMS=="usb", ATTRS{idVendor}=="134b", ATTRS{idProduct}=="0206", GROUP="users", MODE="0666"
+// 로 한다.
 
 ///////////////////////////////
 // local variables
@@ -164,7 +168,8 @@ int main(int argc, char* argv[])
 	wchar_t wstr[MAX_STR];
 	hid_device *h_dev;
 	int i;
-	unsigned char s_write[1+3+76+104+37] = {0,};
+	int n_test = 0;
+	unsigned char s_write[1+64] = {0,};
 
 #ifdef WIN32
 	UNREFERENCED_PARAMETER(argc);
@@ -211,47 +216,48 @@ int main(int argc, char* argv[])
 	 		continue;
 		}
 
-		//send data
-		res = gel_hid_write( h_dev, s_write, sizeof(s_write) );
-		if( res != sizeof(s_write) ){
-			printf("error write -_-\n");
-		}
-		else{
-			printf("write OK ^_^\n");
-		}
+		for( n_test = 0; n_test <10; n_test ++ ){
+			//send data
+			res = gel_hid_write( h_dev, s_write, sizeof(s_write) );
+			if( res != sizeof(s_write) ){
+				printf("[%d] - error write -_-\n",n_test );
+			}
+			else{
+				printf("[%d] - write OK ^_^\n",n_test);
+			}
 
+			// Set the hid_read() function to be non-blocking.
+			gel_hid_set_nonblocking(h_dev, 1);
 
-		// Set the hid_read() function to be non-blocking.
-		gel_hid_set_nonblocking(h_dev, 1);
+			// Try to read from the device. There shoud be no
+			// data here, but execution should not block.
+			res = gel_hid_read(h_dev, buf, 17);
 
-		// Try to read from the device. There shoud be no
-		// data here, but execution should not block.
-		res = gel_hid_read(h_dev, buf, 17);
+			memset(buf,0,sizeof(buf));
 
-		memset(buf,0,sizeof(buf));
+			// Read requested state. hid_read() has been set to be
+			// non-blocking by the call to hid_set_nonblocking() above.
+			// This loop demonstrates the non-blocking nature of hid_read().
+			res = 0;
+			while (res == 0) {
+				res = gel_hid_read(h_dev, buf, sizeof(buf));
+				if (res == 0)
+					printf("waiting...\n");
+				if (res < 0)
+					printf("Unable to read()\n");
+				#ifdef WIN32
+				Sleep(100);
+				#else
+				usleep(100*1000);
+				#endif
+			}
 
-		// Read requested state. hid_read() has been set to be
-		// non-blocking by the call to hid_set_nonblocking() above.
-		// This loop demonstrates the non-blocking nature of hid_read().
-		res = 0;
-		while (res == 0) {
-			res = gel_hid_read(h_dev, buf, sizeof(buf));
-			if (res == 0)
-				printf("waiting...\n");
-			if (res < 0)
-				printf("Unable to read()\n");
-			#ifdef WIN32
-			Sleep(500);
-			#else
-			usleep(500*1000);
-			#endif
-		}
-
-		printf("Data read - %d:\n   ",res);
-		// Print out the returned buffer.
-		for (i = 0; i < res; i++)
-			printf("%02hhx ", buf[i]);
-		printf("\n");
+			printf("Data read - %d:\n   ",res);
+			// Print out the returned buffer.
+			for (i = 0; i < res; i++)
+				printf("%02hhx ", buf[i]);
+			printf("\n");
+		}//end for
 
 		gel_hid_close(h_dev);
 
