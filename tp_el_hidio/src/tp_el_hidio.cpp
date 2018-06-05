@@ -39,19 +39,19 @@ type_hid_error gel_hid_error = NULL;
 
 /////////////////////////////////////////////////////////
 // local function prototype
-static void *_load_library();
+static void *_load_library( const char *s_so_name );
 static void _free_library( void *h_dll );
 
 
 /////////////////////////////////////////////////////////
 // local function bodies
-void *_load_library()
+void *_load_library( const char *s_so_name )
 {
 	void *h_dll = NULL;
 	unsigned char b_error = 1;
 
 	do{
-		h_dll = dlopen("./libhidapi.so", RTLD_NOW);//RTLD_LAZY
+		h_dll = dlopen( s_so_name, RTLD_NOW);//RTLD_LAZY
 		if( h_dll == NULL ){
 			continue;
 		}
@@ -180,6 +180,7 @@ int main(int argc, char* argv[])
 	unsigned short w_vid = 0x134b;
 	unsigned short w_pid = 0x0206;
 	int n_interface = 1;
+	char s_so_name[256] = {0,};
 	//
 #ifdef WIN32
 	UNREFERENCED_PARAMETER(argc);
@@ -197,12 +198,15 @@ int main(int argc, char* argv[])
 
 	///////////////////////////////////////////////////////////////////////////////////////////
 	///////////////////////////////////////////////////////////////////////////////////////////
+	//strcpy( s_so_name, ".//libhidapi.so");
+	strcpy( s_so_name, ".//libhidapi-libusb.so");
+
 	if(argc==2 ){
 		printf( "=================\n" );
 		printf( " = PINPAD TEST = \n" );
 		w_pid = 0x0316;
 		n_interface = 0;
-		n_tx = 1+320;
+		n_tx = 1+319;
 		n_rx = 2112;
 		c_tx_report_id = 1;
 		c_req = 0x50;
@@ -214,7 +218,7 @@ int main(int argc, char* argv[])
 	///////////////////////////////////////////////////////////////////////////////////////////
 
 	do{
-		h_dll = _load_library();
+		h_dll = _load_library( s_so_name );
 		if( h_dll == NULL ){
 			continue;
 		}
@@ -240,7 +244,12 @@ int main(int argc, char* argv[])
 		// Open the device using the VID, PID,
 		// and optionally the Serial number.
 		////handle = hid_open(0x4d8, 0x3f, L"12345");
-		h_dev = gel_hid_open_ex(w_vid, w_pid, n_interface, NULL);
+		if( argc==2 ){
+			h_dev = gel_hid_open(w_vid, w_pid, NULL);
+		}
+		else{
+			h_dev = gel_hid_open_ex(w_vid, w_pid, n_interface, NULL);
+		}
 		if (!h_dev) {
 			printf("unable to open device\n");
 	 		continue;
@@ -252,10 +261,10 @@ int main(int argc, char* argv[])
 			s_tx[1] = c_req;
 			res = gel_hid_write( h_dev, s_tx, n_tx );
 			if( res != n_tx ){
-				printf("[%d] - error write %d bytes -_-\n",n_test,n_tx );
+				printf("[%d] - error write %d bytes %02X, %02X -_-\n",n_test,n_tx,s_tx[0],s_tx[1] );
 			}
 			else{
-				printf("[%d] - write %d bytes OK ^_^\n",n_test,n_tx);
+				printf("[%d] - write %d bytes OK  %02X, %02X ^_^\n",n_test,n_tx,s_tx[0],s_tx[1]);
 			}
 
 			// Set the hid_read() function to be non-blocking.
