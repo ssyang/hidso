@@ -163,14 +163,24 @@ void _free_library( void *h_dll )
 int main(int argc, char* argv[])
 {
 	int res;
-	unsigned char buf[256];
+
 	#define MAX_STR 255
 	wchar_t wstr[MAX_STR];
 	hid_device *h_dev;
 	int i;
+	int n_wait = 0;
 	int n_test = 0;
-	unsigned char s_write[1+64] = {0,};
-
+	unsigned char s_rx[2560] = {0,};
+	unsigned char s_tx[2560] = {0,};
+	unsigned char c_req = 0;
+	int n_rx = 220;
+	int n_tx = 1+64;
+	unsigned char c_tx_report_id = 0;
+	// for usb device.
+	unsigned short w_vid = 0x134b;
+	unsigned short w_pid = 0x0206;
+	int n_interface = 1;
+	//
 #ifdef WIN32
 	UNREFERENCED_PARAMETER(argc);
 	UNREFERENCED_PARAMETER(argv);
@@ -179,6 +189,29 @@ int main(int argc, char* argv[])
 
 	//load library
 	void* h_dll = NULL;
+
+	//
+	for( i=0; i<argc; i++ ){
+		printf( "arg[%d] - %s\n", i, argv[i] );
+	}//end for
+
+	///////////////////////////////////////////////////////////////////////////////////////////
+	///////////////////////////////////////////////////////////////////////////////////////////
+	if(argc==2 ){
+		printf( "=================\n" );
+		printf( " = PINPAD TEST = \n" );
+		w_pid = 0x0316;
+		n_interface = 0;
+		n_tx = 1+320;
+		n_rx = 2112;
+		c_tx_report_id = 1;
+		c_req = 0x50;
+	}
+	else{
+		printf( "=================\n" );
+		printf( " = MSR TEST = \n" );
+	}
+	///////////////////////////////////////////////////////////////////////////////////////////
 
 	do{
 		h_dll = _load_library();
@@ -191,26 +224,23 @@ int main(int argc, char* argv[])
 		devs = gel_hid_enumerate(0x0, 0x0);
 		cur_dev = devs;
 		while (cur_dev) {
-			printf("Device Found\n  type: %04hx %04hx\n  path: %s\n  serial_number: %ls", cur_dev->vendor_id, cur_dev->product_id, cur_dev->path, cur_dev->serial_number);
-			printf("\n");
-			printf("  Manufacturer: %ls\n", cur_dev->manufacturer_string);
-			printf("  Product:      %ls\n", cur_dev->product_string);
-			printf("  Release:      %hx\n", cur_dev->release_number);
-			printf("  Interface:    %d\n",  cur_dev->interface_number);
-			printf("\n");
+			if( cur_dev->vendor_id == w_vid ){
+				printf("Device Found\n  type: %04hx %04hx\n  path: %s\n  serial_number: %ls", cur_dev->vendor_id, cur_dev->product_id, cur_dev->path, cur_dev->serial_number);
+				printf("\n");
+				printf("  Manufacturer: %ls\n", cur_dev->manufacturer_string);
+				printf("  Product:      %ls\n", cur_dev->product_string);
+				printf("  Release:      %hx\n", cur_dev->release_number);
+				printf("  Interface:    %d\n",  cur_dev->interface_number);
+				printf("\n");
+			}
 			cur_dev = cur_dev->next;
 		}
 		gel_hid_free_enumeration(devs);
 
-		// Set up the command buffer.
-		memset(buf,0x00,sizeof(buf));
-		buf[0] = 0x01;
-		buf[1] = 0x81;
-
 		// Open the device using the VID, PID,
 		// and optionally the Serial number.
 		////handle = hid_open(0x4d8, 0x3f, L"12345");
-		h_dev = gel_hid_open_ex(0x134b, 0x0206, 1, NULL);
+		h_dev = gel_hid_open_ex(w_vid, w_pid, n_interface, NULL);
 		if (!h_dev) {
 			printf("unable to open device\n");
 	 		continue;
@@ -218,29 +248,28 @@ int main(int argc, char* argv[])
 
 		for( n_test = 0; n_test <10; n_test ++ ){
 			//send data
-			res = gel_hid_write( h_dev, s_write, sizeof(s_write) );
-			if( res != sizeof(s_write) ){
-				printf("[%d] - error write -_-\n",n_test );
+			s_tx[0] = c_tx_report_id;
+			s_tx[1] = c_req;
+			res = gel_hid_write( h_dev, s_tx, n_tx );
+			if( res != n_tx ){
+				printf("[%d] - error write %d bytes -_-\n",n_test,n_tx );
 			}
 			else{
-				printf("[%d] - write OK ^_^\n",n_test);
+				printf("[%d] - write %d bytes OK ^_^\n",n_test,n_tx);
 			}
 
 			// Set the hid_read() function to be non-blocking.
 			gel_hid_set_nonblocking(h_dev, 1);
 
-			// Try to read from the device. There shoud be no
-			// data here, but execution should not block.
-			res = gel_hid_read(h_dev, buf, 17);
-
-			memset(buf,0,sizeof(buf));
+			memset(s_rx,0,n_rx);
 
 			// Read requested state. hid_read() has been set to be
 			// non-blocking by the call to hid_set_nonblocking() above.
 			// This loop demonstrates the non-blocking nature of hid_read().
+			n_wait = 0;
 			res = 0;
 			while (res == 0) {
-				res = gel_hid_read(h_dev, buf, sizeof(buf));
+				res = gel_hid_read(h_dev, s_rx, n_rx );
 				if (res == 0)
 					printf("waiting...\n");
 				if (res < 0)
@@ -250,15 +279,24 @@ int main(int argc, char* argv[])
 				#else
 				usleep(100*1000);
 				#endif
+
+				n_wait++;
+				if( n_wait > 10 ){
+					gel_hid_close(h_dev);
+					gel_hid_exit();
+					_free_library( h_dll );
+					return 1;
+				}
 			}
 
 			printf("Data read - %d:\n   ",res);
 			// Print out the returned buffer.
 			for (i = 0; i < res; i++)
-				printf("%02hhx ", buf[i]);
+				printf("%02hhx ", s_rx[i]);
 			printf("\n");
 		}//end for
 
+		//
 		gel_hid_close(h_dev);
 
 		/* Free static HIDAPI objects. */
